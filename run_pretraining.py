@@ -81,6 +81,8 @@ flags.DEFINE_integer("max_eval_steps", 100, "Maximum number of eval steps.")
 
 flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
 
+flags.DEFINE_bool("init_no_transformer", False, "Whether to load partial model or not")
+
 tf.flags.DEFINE_string(
     "tpu_name", None,
     "The Cloud TPU to use for training. This should be either the name "
@@ -108,7 +110,7 @@ flags.DEFINE_integer(
 
 def model_fn_builder(bert_config, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
-                     use_one_hot_embeddings):
+                     use_one_hot_embeddings, init_no_transformer):
   """Returns `model_fn` closure for TPUEstimator."""
 
   def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -152,8 +154,13 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
     initialized_variable_names = {}
     scaffold_fn = None
     if init_checkpoint:
-      (assignment_map, initialized_variable_names
-      ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
+      if init_no_transformer:
+        (assignment_map, initialized_variable_names
+        ) = modeling.get_assignment_map_from_partial_checkpoint(tvars, init_checkpoint)
+      else:
+        (assignment_map, initialized_variable_names
+        ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
+          
       if use_tpu:
 
         def tpu_scaffold():
@@ -444,7 +451,8 @@ def main(_):
       num_train_steps=FLAGS.num_train_steps,
       num_warmup_steps=FLAGS.num_warmup_steps,
       use_tpu=FLAGS.use_tpu,
-      use_one_hot_embeddings=FLAGS.use_tpu)
+      use_one_hot_embeddings=FLAGS.use_tpu,
+      init_no_transformer=FLAGS.init_no_transformer)
 
   # If TPU is not available, this will fall back to normal Estimator on CPU
   # or GPU.
